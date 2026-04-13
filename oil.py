@@ -1,4 +1,5 @@
 import requests
+from bs4 import BeautifulSoup
 
 # ========= 配置 =========
 url = "http://www.qiyoujiage.com/yunnan/chuxiong.shtml"
@@ -13,27 +14,29 @@ try:
     res = requests.get(url, headers=headers, timeout=10)
     res.encoding = "utf-8"
 
-    text = res.text
+    soup = BeautifulSoup(res.text, "html.parser")
 
     price92 = ""
     price95 = ""
 
-    # 👉 核心：逐行筛选
-    for line in text.split("\n"):
-        line = line.strip()
+    # 👉 关键：找表格里的数据
+    tables = soup.find_all("table")
 
-        if "92号汽油" in line and "元/升" in line:
-            price92 = line
+    for table in tables:
+        rows = table.find_all("tr")
 
-        if "95号汽油" in line and "元/升" in line:
-            price95 = line
+        for row in rows:
+            text = row.get_text().strip()
 
-    # 👉 二次清洗（去HTML标签）
-    import re
-    clean = lambda x: re.sub("<.*?>", "", x)
+            if "92号汽油" in text:
+                price92 = text
 
-    price92 = clean(price92)
-    price95 = clean(price95)
+            if "95号汽油" in text:
+                price95 = text
+
+    # 👉 清洗格式（去掉多余空格）
+    price92 = " ".join(price92.split())
+    price95 = " ".join(price95.split())
 
     # 👉 兜底
     if not price92:
