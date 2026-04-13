@@ -33,42 +33,46 @@ jobs:
                   res = requests.get(url, headers=headers, timeout=8)
                   res.encoding = "utf-8"
               except requests.exceptions.Timeout:
-                  return "请求超时"
+                  return "请求超时", ""
               except requests.exceptions.ConnectionError:
-                  return "网络连接失败"
+                  return "网络连接失败", ""
 
               soup = BeautifulSoup(res.text, "html.parser")
-              result = []
-              fuel_types = ["92", "95", "98", "柴油"]
 
+              prices = []
               for tag in soup.find_all(["td", "div", "p", "span", "li"]):
                   text = tag.get_text(strip=True)
-                  has_fuel = any(f in text for f in fuel_types)
                   has_price = re.search(r"\d+\.\d{2}", text)
-                  if has_fuel and has_price and len(text) < 30:
-                      result.append(text)
-
-              if not result:
-                  for tag in soup.find_all(text=re.compile(r"\d+\.\d{2}")):
-                      text = tag.strip()
-                      if text and len(text) < 30:
-                          result.append(text)
-
-              if not result:
-                  return "未找到价格数据"
+                  if has_price and len(text) < 30:
+                      prices.append(text)
 
               seen = set()
               final = []
-              for l in result:
-                  if l not in seen:
-                      seen.add(l)
-                      final.append(l)
+              for p in prices:
+                  if p not in seen:
+                      seen.add(p)
+                      final.append(p)
+              final = final[:4]
 
-              return "\n".join(final[:10])
+              labels = ["💧 92号汽油", "💧 95号汽油", "💧 98号汽油", "💧 0号柴油"]
+              lines = []
+              for i, price in enumerate(final):
+                  label = labels[i] if i < len(labels) else f"油品{i+1}"
+                  price_clean = re.sub(r'[（(].*?[）)]', '', price).strip()
+                  lines.append(f"{label}：{price_clean} 元/升")
+
+              notice = ""
+              for tag in soup.find_all(string=re.compile(r"油价.*调整|调整.*油价")):
+                  text = tag.strip()
+                  if text and len(text) < 100:
+                      notice = text
+                      break
+
+              return "\n".join(lines), notice
 
           def push_notify(title, message):
               url = "https://messagepush.luckfast.com/send/avF9zCcVsXs/4453fbdabe83c204f4a5c1e03cb29ee5"
-              message = message[:200]
+              message = message[:300]
               params = {"title": title, "message": message}
               try:
                   res = requests.get(url, params=params, timeout=10)
@@ -77,7 +81,12 @@ jobs:
                   print("推送失败：", e)
 
           today = datetime.now().strftime("%m月%d日")
-          price = fetch_price()
-          print("抓取内容：\n", price)
-          push_notify(f"⛽ 楚雄油价 {today}", price)
+          price_text, notice = fetch_price()
+          print("抓取内容：\n", price_text)
+
+          message = price_text
+          if notice:
+              message += f"\n\n📢 {notice}"
+
+          push_notify(f"⛽ 楚雄今日油价 {today}", message)
           EOF
