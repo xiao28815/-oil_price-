@@ -19,42 +19,41 @@ def fetch_price():
 
     soup = BeautifulSoup(res.text, "html.parser")
 
-    # 只找包含价格数字（如 7.89）的文本，过滤掉JS和导航文字
-    result = []
-    fuel_types = ["92", "95", "98", "柴油"]
+    # 按顺序找价格数字（网站固定顺序：92、95、98、柴油）
+    labels = ["🟢 92号汽油", "🔵 95号汽油", "🟣 98号汽油", "🟡 0号柴油"]
     
-    for tag in soup.find_all(["td", "div", "p", "span", "li"]):
-        text = tag.get_text(strip=True)
-        # 必须同时包含油号关键词和价格数字
-        has_fuel = any(f in text for f in fuel_types)
-        has_price = re.search(r"\d+\.\d{2}", text)
-        if has_fuel and has_price and len(text) < 30:
-            result.append(text)
+    prices = []
+    for tag in soup.find_all(text=re.compile(r"\d+\.\d{2}")):
+        text = tag.strip()
+        # 只要纯价格或"9.13(元)"这样的格式，过滤掉长文本
+        if re.fullmatch(r"[\d.()元/升\s]+", text) and len(text) < 15:
+            # 提取数字
+            num = re.search(r"\d+\.\d{2}", text)
+            if num:
+                prices.append(num.group())
 
-    if not result:
-        # 兜底：直接找所有含小数的短文本
-        for tag in soup.find_all(text=re.compile(r"\d+\.\d{2}")):
-            text = tag.strip()
-            if text and len(text) < 30:
-                result.append(text)
+    # 去重保序
+    seen = set()
+    unique_prices = []
+    for p in prices:
+        if p not in seen:
+            seen.add(p)
+            unique_prices.append(p)
 
-    if not result:
+    if not unique_prices:
         return "未找到价格数据"
 
-    # 去重
-    seen = set()
-    final = []
-    for l in result:
-        if l not in seen:
-            seen.add(l)
-            final.append(l)
+    # 拼接标号和价格
+    lines = []
+    for i, price in enumerate(unique_prices[:4]):
+        label = labels[i] if i < len(labels) else f"油品{i+1}"
+        lines.append(f"{label}：{price} 元/升")
 
-    return "\n".join(final[:10])  # 最多10条，控制长度
+    return "\n".join(lines)
 
 
 def push_notify(title, message):
     url = "https://messagepush.luckfast.com/send/avF9zCcVsXs/4453fbdabe83c204f4a5c1e03cb29ee5"
-    # 截断防止再次 PayloadTooLarge
     message = message[:200]
     params = {"title": title, "message": message}
     try:
