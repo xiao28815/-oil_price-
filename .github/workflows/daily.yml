@@ -21,3 +21,4 @@ jobs:
 
       - name: 爬取并推送
         run: python fetch_price.py
+        
