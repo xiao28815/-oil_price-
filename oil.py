@@ -2,7 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 
 # 修改为你的城市页面
-url = "http://www.qiyoujiage.com/yunnnan/chuxiong.shtml"
+url = "http://www.qiyoujiage.com/yunnan/chuxiong.shtml"
 
 # Server酱KEY
 sendkey = "SCT337050TjH8PFrQdsHkgTlEkbCNBHUFy"
