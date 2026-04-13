@@ -1,0 +1,24 @@
+name: oil price
+
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: setup python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: install
+        run: pip install -r requirements.txt
+
+      - name: run script
+        run: python oil.py
