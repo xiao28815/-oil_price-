@@ -1,77 +1,96 @@
-import requests
-from bs4 import BeautifulSoup
-from datetime import datetime
-import re
+name: Daily Oil Price
 
-def fetch_price():
-    # 换用PC版页面，有时候绕过封锁
-    url = "https://www.qiyoujiage.com/yunnan/chuxiong.shtml"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "zh-CN,zh;q=0.9",
-        "Referer": "https://www.qiyoujiage.com/yunnan.shtml"
-    }
-    try:
-        res = requests.get(url, headers=headers, timeout=8)
-        res.encoding = "utf-8"
-        print("状态码：", res.status_code)
-        print("页面长度：", len(res.text))
-        print("页面片段：", res.text[:500])
-    except Exception as e:
-        return f"请求失败：{e}", ""
+on:
+  workflow_dispatch:
 
-    soup = BeautifulSoup(res.text, "html.parser")
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-    prices = []
-    for tag in soup.find_all(["td", "div", "p", "span", "li"]):
-        text = tag.get_text(strip=True)
-        if re.search(r"\d+\.\d{2}", text) and len(text) < 30:
-            prices.append(text)
+      - name: 安装依赖
+        run: pip install requests beautifulsoup4
 
-    seen = set()
-    final = []
-    for p in prices:
-        if p not in seen:
-            seen.add(p)
-            final.append(p)
-    final = final[:4]
+      - name: 爬取并推送
+        run: |
+          python - <<'EOF'
+          import requests
+          from bs4 import BeautifulSoup
+          from datetime import datetime
+          import re
 
-    if not final:
-        return "未找到价格", ""
+          def fetch_price():
+              url = "https://www.qiyoujiage.com/yunnan/chuxiong.shtml"
+              headers = {
+                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                  "Accept-Language": "zh-CN,zh;q=0.9",
+                  "Referer": "https://www.qiyoujiage.com/yunnan.shtml"
+              }
+              try:
+                  res = requests.get(url, headers=headers, timeout=8)
+                  res.encoding = "utf-8"
+                  print("status:", res.status_code)
+                  print("length:", len(res.text))
+                  print("preview:", res.text[:300])
+              except Exception as e:
+                  return f"failed: {e}", ""
 
-    labels = ["💧 92号汽油", "💧 95号汽油", "💧 98号汽油", "💧 0号柴油"]
-    lines = []
-    for i, price in enumerate(final):
-        label = labels[i] if i < len(labels) else f"油品{i+1}"
-        price_clean = re.sub(r'[（(].*?[）)]', '', price).strip()
-        lines.append(f"{label}：{price_clean} 元/升")
+              soup = BeautifulSoup(res.text, "html.parser")
 
-    notice = ""
-    for tag in soup.find_all(string=re.compile(r"油价.*调整|调整.*油价")):
-        text = tag.strip()
-        if text and len(text) < 100:
-            notice = text
-            break
+              prices = []
+              for tag in soup.find_all(["td", "div", "p", "span", "li"]):
+                  text = tag.get_text(strip=True)
+                  if re.search(r"\d+\.\d{2}", text) and len(text) < 30:
+                      prices.append(text)
 
-    return "\n".join(lines), notice
+              seen = set()
+              final = []
+              for p in prices:
+                  if p not in seen:
+                      seen.add(p)
+                      final.append(p)
+              final = final[:4]
 
-def push_notify(title, message):
-    url = "https://messagepush.luckfast.com/send/avF9zCcVsXs/4453fbdabe83c204f4a5c1e03cb29ee5"
-    message = message[:300]
-    params = {"title": title, "message": message}
-    try:
-        res = requests.get(url, params=params, timeout=10)
-        print("推送结果：", res.text)
-    except Exception as e:
-        print("推送失败：", e)
+              if not final:
+                  return "no price found", ""
 
-today = datetime.now().strftime("%m月%d日")
-price_text, notice = fetch_price()
-print("抓取内容：\n", price_text)
+              labels = ["92", "95", "98", "0"]
+              lines = []
+              for i, price in enumerate(final):
+                  label = labels[i] if i < len(labels) else str(i+1)
+                  price_clean = re.sub(r'[(（].*?[)）]', '', price).strip()
+                  lines.append(f"💧 {label}号汽油：{price_clean} 元/升")
 
-message = price_text
-if notice:
-    message += f"\n\n📢 {notice}"
+              notice = ""
+              for tag in soup.find_all(string=re.compile(r"\d+月\d+日.*调整")):
+                  text = tag.strip()
+                  if text and len(text) < 100:
+                      notice = text
+                      break
 
-push_notify(f"⛽ 楚雄今日油价 {today}", message)
+              return "\n".join(lines), notice
+
+          def push_notify(title, message):
+              url = "https://messagepush.luckfast.com/send/avF9zCcVsXs/4453fbdabe83c204f4a5c1e03cb29ee5"
+              params = {"title": title, "message": message[:300]}
+              try:
+                  res = requests.get(url, params=params, timeout=10)
+                  print("push result:", res.text)
+              except Exception as e:
+                  print("push failed:", e)
+
+          today = datetime.now().strftime("%m月%d日")
+          price_text, notice = fetch_price()
+          print("prices:\n", price_text)
+
+          message = price_text
+          if notice:
+              message += f"\n\n📢 {notice}"
+
+          push_notify(f"⛽ 楚雄今日油价 {today}", message)
+          EOF
