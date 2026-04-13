@@ -1,7 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
-import os
 import re
 
 def fetch_price():
@@ -14,51 +13,49 @@ def fetch_price():
         res = requests.get(url, headers=headers, timeout=8)
         res.encoding = "utf-8"
     except requests.exceptions.Timeout:
-        return "请求超时，网站无响应"
+        return "请求超时"
     except requests.exceptions.ConnectionError:
         return "网络连接失败"
 
     soup = BeautifulSoup(res.text, "html.parser")
-    lines = []
 
-    # 方法1：找所有包含"汽油"或"柴油"的文本节点
-    for tag in soup.find_all(text=re.compile(r"(汽油|柴油|元/升)")):
-        text = tag.strip()
-        if text:
-            lines.append(text)
+    # 只找包含价格数字（如 7.89）的文本，过滤掉JS和导航文字
+    result = []
+    fuel_types = ["92", "95", "98", "柴油"]
+    
+    for tag in soup.find_all(["td", "div", "p", "span", "li"]):
+        text = tag.get_text(strip=True)
+        # 必须同时包含油号关键词和价格数字
+        has_fuel = any(f in text for f in fuel_types)
+        has_price = re.search(r"\d+\.\d{2}", text)
+        if has_fuel and has_price and len(text) < 30:
+            result.append(text)
 
-    # 方法2：找 table（备用）
-    if not lines:
-        table = soup.find("table")
-        if table:
-            for row in table.find_all("tr"):
-                cols = [td.get_text(strip=True) for td in row.find_all(["td", "th"])]
-                if cols:
-                    lines.append("  ".join(cols))
+    if not result:
+        # 兜底：直接找所有含小数的短文本
+        for tag in soup.find_all(text=re.compile(r"\d+\.\d{2}")):
+            text = tag.strip()
+            if text and len(text) < 30:
+                result.append(text)
 
-    # 方法3：找含价格数字的 div/p/span
-    if not lines:
-        for tag in soup.find_all(["div", "p", "span", "li"]):
-            text = tag.get_text(strip=True)
-            if re.search(r"\d+\.\d+", text) and ("油" in text or "元" in text):
-                lines.append(text)
-
-    if not lines:
-        return "解析失败，页面片段：\n" + soup.get_text()[:300]
+    if not result:
+        return "未找到价格数据"
 
     # 去重
     seen = set()
-    result = []
-    for l in lines:
+    final = []
+    for l in result:
         if l not in seen:
             seen.add(l)
-            result.append(l)
+            final.append(l)
 
-    return "\n".join(result[:20])
+    return "\n".join(final[:10])  # 最多10条，控制长度
 
 
 def push_notify(title, message):
     url = "https://messagepush.luckfast.com/send/avF9zCcVsXs/4453fbdabe83c204f4a5c1e03cb29ee5"
+    # 截断防止再次 PayloadTooLarge
+    message = message[:200]
     params = {"title": title, "message": message}
     try:
         res = requests.get(url, params=params, timeout=10)
