@@ -19,6 +19,8 @@ jobs:
         run: |
           python - <<'EOF'
           import requests
+          import urllib3
+          urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
           from bs4 import BeautifulSoup
           from datetime import datetime
           import re
@@ -32,7 +34,7 @@ jobs:
                   "Referer": "https://www.qiyoujiage.com/yunnan.shtml"
               }
               try:
-                  res = requests.get(url, headers=headers, timeout=8)
+                  res = requests.get(url, headers=headers, timeout=8, verify=False)
                   res.encoding = "utf-8"
                   print("status:", res.status_code)
                   print("length:", len(res.text))
