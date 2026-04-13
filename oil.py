@@ -1,63 +1,34 @@
 import requests
 from bs4 import BeautifulSoup
+from datetime import datetime
+import os
 
-# ========= 配置 =========
-url = "http://www.qiyoujiage.com/yunnan/chuxiong.shtml"
-sendkey = "SCT337050TjH8PFrQdsHkgTlEkbCNBHUFy"
-# ======================
-
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
-
-try:
-    res = requests.get(url, headers=headers, timeout=10)
+def fetch_price():
+    url = "http://www.qiyoujiage.com/yunnan/chuxiong.shtml"
+    headers = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"}
+    res = requests.get(url, headers=headers, timeout=15)
     res.encoding = "utf-8"
-
     soup = BeautifulSoup(res.text, "html.parser")
 
-    price92 = ""
-    price95 = ""
+    table = soup.find("table")
+    if not table:
+        return "未找到价格表格"
 
-    # 👉 关键：找表格里的数据
-    tables = soup.find_all("table")
+    rows = table.find_all("tr")
+    lines = []
+    for row in rows:
+        cols = [td.get_text(strip=True) for td in row.find_all(["td", "th"])]
+        if cols:
+            lines.append("  ".join(cols))
+    return "\n".join(lines)
 
-    for table in tables:
-        rows = table.find_all("tr")
+def push_notify(title, message):
+    url = "https://messagepush.luckfast.com/send/avF9zCcVsXs/4453fbdabe83c204f4a5c1e03cb29ee5"
+    params = {"title": title, "message": message}
+    res = requests.get(url, params=params, timeout=10)
+    print("推送结果：", res.text)
 
-        for row in rows:
-            text = row.get_text().strip()
-
-            if "92号汽油" in text:
-                price92 = text
-
-            if "95号汽油" in text:
-                price95 = text
-
-    # 👉 清洗格式（去掉多余空格）
-    price92 = " ".join(price92.split())
-    price95 = " ".join(price95.split())
-
-    # 👉 兜底
-    if not price92:
-        price92 = "92号汽油：获取失败"
-    if not price95:
-        price95 = "95号汽油：获取失败"
-
-    msg = f"""
-📊 今日油价（楚雄）
-
-{price92}
-{price95}
-"""
-
-except Exception as e:
-    msg = f"油价获取失败：{str(e)}"
-
-# ========= 推送 =========
-push_url = f"https://sctapi.ftqq.com/{sendkey}.send"
-
-requests.get(push_url, params={
-    "title": "今日油价提醒",
-    "desp": msg
-})
+if __name__ == "__main__":
+    today = datetime.now().strftime("%m月%d日")
+    price = fetch_price()
+    push_notify(f"⛽ 楚雄油价 {today}", price)
